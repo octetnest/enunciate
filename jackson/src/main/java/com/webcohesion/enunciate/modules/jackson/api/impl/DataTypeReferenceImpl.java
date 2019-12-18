@@ -133,7 +133,7 @@ public class DataTypeReferenceImpl implements DataTypeReference {
     Example example = null;
     if (this.dataType instanceof ObjectDataTypeImpl) {
       ObjectTypeDefinition typeDefinition = ((ObjectDataTypeImpl) this.dataType).typeDefinition;
-      example = typeDefinition == null || typeDefinition.getContext().isDisableExamples() ? null : new DataTypeExampleImpl(typeDefinition, this.containers);
+      example = typeDefinition == null || typeDefinition.getContext().isDisableExamples() ? null : new DataTypeExampleImpl(typeDefinition, this.containers, registrationContext);
     }
     else if (this.dataType instanceof EnumDataTypeImpl) {
       String body = "...";
@@ -148,19 +148,6 @@ public class DataTypeReferenceImpl implements DataTypeReference {
 
   @Override
   public BaseTypeFormat getBaseTypeFormat() {
-    if (this.jsonType instanceof JsonPrimitiveType) {
-      TypeKind kind = ((JsonPrimitiveType) this.jsonType).getKind();
-      switch (kind) {
-        case INT:
-          return BaseTypeFormat.INT32;
-        case LONG:
-          return BaseTypeFormat.INT64;
-        case FLOAT:
-          return BaseTypeFormat.FLOAT;
-        case DOUBLE:
-          return BaseTypeFormat.DOUBLE;
-      }
-    }
-    return null;
+    return this.jsonType.getFormat();
   }
 }

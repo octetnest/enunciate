@@ -30,10 +30,7 @@ import com.webcohesion.enunciate.modules.spring_web.api.impl.ResourceImpl;
 import com.webcohesion.enunciate.modules.spring_web.model.RequestMapping;
 import com.webcohesion.enunciate.modules.spring_web.model.SpringController;
 import com.webcohesion.enunciate.modules.spring_web.model.SpringControllerAdvice;
-import com.webcohesion.enunciate.util.PathSortStrategy;
-import com.webcohesion.enunciate.util.ResourceComparator;
-import com.webcohesion.enunciate.util.ResourceGroupComparator;
-import com.webcohesion.enunciate.util.SortedList;
+import com.webcohesion.enunciate.util.*;
 
 import java.util.*;
 
@@ -143,7 +140,7 @@ public class EnunciateSpringWebContext extends EnunciateModuleContext {
   public List<ResourceGroup> getResourceGroupsByClass(ApiRegistrationContext registrationContext) {
     List<ResourceGroup> resourceGroups = new ArrayList<ResourceGroup>();
     Set<String> slugs = new TreeSet<String>();
-    FacetFilter facetFilter = context.getConfiguration().getFacetFilter();
+    FacetFilter facetFilter = registrationContext.getFacetFilter();
     for (SpringController springController : controllers) {
       if (!facetFilter.accept(springController)) {
         continue;
@@ -177,7 +174,7 @@ public class EnunciateSpringWebContext extends EnunciateModuleContext {
   public List<ResourceGroup> getResourceGroupsByPath(ApiRegistrationContext registrationContext) {
     Map<String, PathBasedResourceGroupImpl> resourcesByPath = new HashMap<String, PathBasedResourceGroupImpl>();
 
-    FacetFilter facetFilter = context.getConfiguration().getFacetFilter();
+    FacetFilter facetFilter = registrationContext.getFacetFilter();
     for (SpringController springController : controllers) {
       if (!facetFilter.accept(springController)) {
         continue;
@@ -205,7 +202,7 @@ public class EnunciateSpringWebContext extends EnunciateModuleContext {
   public List<ResourceGroup> getResourceGroupsByAnnotation(ApiRegistrationContext registrationContext) {
     Map<String, AnnotationBasedResourceGroupImpl> resourcesByAnnotation = new HashMap<String, AnnotationBasedResourceGroupImpl>();
 
-    FacetFilter facetFilter = context.getConfiguration().getFacetFilter();
+    FacetFilter facetFilter = registrationContext.getFacetFilter();
     for (SpringController springController : controllers) {
       if (!facetFilter.accept(springController)) {
         continue;
@@ -215,10 +212,10 @@ public class EnunciateSpringWebContext extends EnunciateModuleContext {
       boolean controllerAnnotationEvaluated = false;
       for (RequestMapping method : springController.getRequestMappings()) {
         if (facetFilter.accept(method)) {
-          com.webcohesion.enunciate.metadata.rs.ResourceGroup annotation = method.getAnnotation(com.webcohesion.enunciate.metadata.rs.ResourceGroup.class);
+          com.webcohesion.enunciate.metadata.rs.ResourceGroup annotation = AnnotationUtils.getResourceGroup(method);
           if (annotation == null) {
             if (!controllerAnnotationEvaluated) {
-              controllerAnnotation = springController.getAnnotation(com.webcohesion.enunciate.metadata.rs.ResourceGroup.class);
+              controllerAnnotation = AnnotationUtils.getResourceGroup(springController);
               controllerAnnotationEvaluated = true;
             }
             annotation = controllerAnnotation;

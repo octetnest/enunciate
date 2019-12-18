@@ -1,12 +1,12 @@
 /**
  * Copyright © 2006-2016 Web Cohesion (info@webcohesion.com)
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,8 +15,11 @@
  */
 package com.webcohesion.enunciate.modules.jackson1;
 
+import com.webcohesion.enunciate.CompletionFailureException;
 import com.webcohesion.enunciate.EnunciateContext;
 import com.webcohesion.enunciate.EnunciateException;
+import com.webcohesion.enunciate.javac.decorations.DecoratedProcessingEnvironment;
+import com.webcohesion.enunciate.javac.decorations.TypeMirrorDecorator;
 import com.webcohesion.enunciate.javac.decorations.element.PropertyElement;
 import com.webcohesion.enunciate.javac.decorations.type.DecoratedDeclaredType;
 import com.webcohesion.enunciate.javac.decorations.type.DecoratedTypeMirror;
@@ -34,7 +37,7 @@ import com.webcohesion.enunciate.modules.jackson1.model.types.JsonType;
 import com.webcohesion.enunciate.modules.jackson1.model.types.KnownJsonType;
 import com.webcohesion.enunciate.modules.jackson1.model.util.JacksonUtil;
 import com.webcohesion.enunciate.modules.jackson1.model.util.MapType;
-import com.webcohesion.enunciate.util.IgnoreUtils;
+import com.webcohesion.enunciate.util.AnnotationUtils;
 import com.webcohesion.enunciate.util.OneTimeLogMessage;
 import com.webcohesion.enunciate.util.TypeHintUtils;
 import org.codehaus.jackson.JsonNode;
@@ -126,11 +129,23 @@ public class EnunciateJackson1Context extends EnunciateModuleContext {
     if (type instanceof DeclaredType && !type.isCollection() && MapType.findMapType(type, this) == null) {
       if (!((DeclaredType) type).getTypeArguments().isEmpty()) {
         //if type arguments apply, create a new "synthetic" declared type that captures the type arguments.
-        type = new ParameterizedJackson1DeclaredType((DeclaredType) type, getContext().getProcessingEnvironment());
+        type = new ParameterizedJackson1DeclaredType((DeclaredType) type, getContext());
       }
       else if (type.isInterface()) {
         //if it's an interface, create a "synthetic" type that pretends like it's an abstract class.
         type = new InterfaceJackson1DeclaredType((DeclaredType) type, getContext().getProcessingEnvironment());
+      }
+    }
+    else if (type instanceof WildcardType) {
+      WildcardType wildcardType = (WildcardType) type;
+      DecoratedProcessingEnvironment env = this.context.getProcessingEnvironment();
+      DecoratedTypeMirror extendsBound = TypeMirrorDecorator.decorate((DecoratedTypeMirror) wildcardType.getExtendsBound(), env);
+      DecoratedTypeMirror superBound = TypeMirrorDecorator.decorate((DecoratedTypeMirror) wildcardType.getSuperBound(), env);
+      if (extendsBound != null) {
+        type = resolveSyntheticType(extendsBound);
+      }
+      else if (superBound != null) {
+        type = resolveSyntheticType(superBound);
       }
     }
     else if (type != null) {
@@ -169,7 +184,7 @@ public class EnunciateJackson1Context extends EnunciateModuleContext {
     knownTypes.put(Double.class.getName(), KnownJsonType.NUMBER);
     knownTypes.put(Float.class.getName(), KnownJsonType.NUMBER);
     knownTypes.put(Integer.class.getName(), KnownJsonType.WHOLE_NUMBER);
-    knownTypes.put(Long.class.getName(), KnownJsonType.WHOLE_NUMBER);
+    knownTypes.put(Long.class.getName(), KnownJsonType.LONG_NUMBER);
     knownTypes.put(Short.class.getName(), KnownJsonType.WHOLE_NUMBER);
     knownTypes.put(Boolean.TYPE.getName(), KnownJsonType.BOOLEAN);
     knownTypes.put(Byte.TYPE.getName(), KnownJsonType.WHOLE_NUMBER);
@@ -231,7 +246,7 @@ public class EnunciateJackson1Context extends EnunciateModuleContext {
     knownTypes.put("java.time.OffsetDateTime", this.dateType);
     knownTypes.put("org.joda.time.DateTime", this.dateType);
     knownTypes.put("java.util.Currency", KnownJsonType.STRING);
-    
+
     for (String m : this.mixins.keySet()) {
       if (knownTypes.remove(m) != null) {
         debug("Unregistering %s from known types, as it is redefined using a mixin.", m);
@@ -308,7 +323,7 @@ public class EnunciateJackson1Context extends EnunciateModuleContext {
   }
 
   public boolean isIgnored(Element el) {
-    if (IgnoreUtils.isIgnored(el)) {
+    if (AnnotationUtils.isIgnored(el)) {
       return true;
     }
 
@@ -518,7 +533,7 @@ public class EnunciateJackson1Context extends EnunciateModuleContext {
     if (subTypes == null && seeAlso == null && declaration instanceof TypeElement) {
       // No annotation tells us what to do, so we'll look up subtypes and add them
       for (Element el : getContext().getApiElements()) {
-        if ((el instanceof TypeElement) && !((TypeElement)el).getQualifiedName().contentEquals(((TypeElement)declaration).getQualifiedName()) && ((DecoratedTypeMirror) el.asType()).isInstanceOf(declaration)) {
+        if ((el instanceof TypeElement) && !((TypeElement) el).getQualifiedName().contentEquals(((TypeElement) declaration).getQualifiedName()) && ((DecoratedTypeMirror) el.asType()).isInstanceOf(declaration)) {
           add(createTypeDefinition((TypeElement) el), stack);
         }
       }
@@ -628,6 +643,15 @@ public class EnunciateJackson1Context extends EnunciateModuleContext {
               typeArg.accept(this, context);
             }
           }
+        }
+        catch (RuntimeException e) {
+          if (e.getClass().getName().endsWith("CompletionFailure")) {
+            LinkedList<Element> referenceStack = new LinkedList<>(context.referenceStack);
+            referenceStack.push(declaration);
+            throw new CompletionFailureException(referenceStack, e);
+          }
+
+          throw e;
         }
         finally {
           context.recursionStack.pop();

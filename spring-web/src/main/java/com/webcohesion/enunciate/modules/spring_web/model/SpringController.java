@@ -20,7 +20,7 @@ import com.webcohesion.enunciate.facets.HasFacets;
 import com.webcohesion.enunciate.javac.decorations.element.DecoratedTypeElement;
 import com.webcohesion.enunciate.javac.decorations.type.TypeVariableContext;
 import com.webcohesion.enunciate.modules.spring_web.EnunciateSpringWebContext;
-import com.webcohesion.enunciate.util.IgnoreUtils;
+import com.webcohesion.enunciate.util.AnnotationUtils;
 import org.springframework.web.bind.annotation.RequestMethod;
 
 import javax.annotation.security.RolesAllowed;
@@ -48,7 +48,7 @@ public class SpringController extends DecoratedTypeElement implements HasFacets 
   private final Set<Facet> facets = new TreeSet<Facet>();
 
   public SpringController(TypeElement delegate, EnunciateSpringWebContext context) {
-    this(delegate, delegate.getAnnotation(org.springframework.web.bind.annotation.RequestMapping.class), context);
+    this(delegate, AnnotationUtils.getAnnotation(org.springframework.web.bind.annotation.RequestMapping.class, delegate, false), context);
   }
 
   private SpringController(TypeElement delegate, org.springframework.web.bind.annotation.RequestMapping mappingInfo, EnunciateSpringWebContext context) {
@@ -138,7 +138,7 @@ public class SpringController extends DecoratedTypeElement implements HasFacets 
 
     ArrayList<RequestMapping> requestMappings = new ArrayList<RequestMapping>();
     for (ExecutableElement method : ElementFilter.methodsIn(delegate.getEnclosedElements())) {
-      if (IgnoreUtils.isIgnored(method)) {
+      if (AnnotationUtils.isIgnored(method)) {
         continue;
       }
 
@@ -154,7 +154,7 @@ public class SpringController extends DecoratedTypeElement implements HasFacets 
 
         for (String path : getPaths()) {
           for (String subpath : subpaths) {
-            if (!path.endsWith("/") && !subpath.startsWith("/")) {
+            if (!path.endsWith("/") && !subpath.isEmpty() && !subpath.startsWith("/")) {
               path = path + "/";
             }
             requestMappings.add(new RequestMapping(extractPathComponents(path + subpath), requestMethods, consumes, produces, method, this, variableContext, context));

@@ -22,6 +22,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.PropertyAccessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.webcohesion.enunciate.CompletionFailureException;
 import com.webcohesion.enunciate.EnunciateContext;
 import com.webcohesion.enunciate.api.ApiRegistry;
 import com.webcohesion.enunciate.javac.decorations.type.DecoratedTypeMirror;
@@ -68,6 +69,9 @@ public class JacksonModule extends BasicProviderModule implements TypeDetectingM
     return this.config.getBoolean("[@collapse-type-hierarchy]", false);
   }
 
+  public String getBeanValidationGroups() {
+    return this.config.getString("[@beanValidationGroups]", "");
+  }
   public boolean isWrapRootValue() {
     return this.config.getBoolean("[@wrapRootValue]", false);
   }
@@ -82,7 +86,11 @@ public class JacksonModule extends BasicProviderModule implements TypeDetectingM
 
   public KnownJsonType getDateFormat() {
     String dateFormatString = this.config.getString("[@dateFormat]", KnownJsonType.WHOLE_NUMBER.name());
-    return KnownJsonType.valueOf(dateFormatString.toUpperCase());
+    KnownJsonType knownType = KnownJsonType.valueOf(dateFormatString.toUpperCase());
+    if (knownType == KnownJsonType.STRING) {
+      knownType = KnownJsonType.DATE_STRING;
+    }
+    return knownType;
   }
 
   @Override
@@ -123,7 +131,7 @@ public class JacksonModule extends BasicProviderModule implements TypeDetectingM
       }
     }
 
-    this.jacksonContext = new EnunciateJacksonContext(context, isHonorJaxbAnnotations(), isHonorGsonAnnotations() ,getDateFormat(), isCollapseTypeHierarchy(), getMixins(), getExternalExamples(), getDefaultVisibility(), isDisableExamples(), isWrapRootValue(), getPropertyNamingStrategy(), isPropertiesAlphabetical());
+    this.jacksonContext = new EnunciateJacksonContext(context, isHonorJaxbAnnotations(), isHonorGsonAnnotations() ,getDateFormat(), isCollapseTypeHierarchy(), getMixins(), getExternalExamples(), getDefaultVisibility(), isDisableExamples(), isWrapRootValue(), getPropertyNamingStrategy(), isPropertiesAlphabetical(), getBeanValidationGroups());
     DataTypeDetectionStrategy detectionStrategy = getDataTypeDetectionStrategy();
     switch (detectionStrategy) {
       case aggressive:
@@ -206,10 +214,21 @@ public class JacksonModule extends BasicProviderModule implements TypeDetectingM
   }
 
   protected void addPotentialJacksonElement(Element declaration, LinkedList<Element> contextStack) {
-    if (declaration instanceof TypeElement) {
-      if (!this.jacksonContext.isKnownTypeDefinition((TypeElement) declaration) && isExplicitTypeDefinition(declaration, this.jacksonContext.isHonorJaxb())) {
-        this.jacksonContext.add(this.jacksonContext.createTypeDefinition((TypeElement) declaration), contextStack);
+    try {
+      if (declaration instanceof TypeElement) {
+        if (!this.jacksonContext.isKnownTypeDefinition((TypeElement) declaration) && isExplicitTypeDefinition(declaration, this.jacksonContext.isHonorJaxb())) {
+          this.jacksonContext.add(this.jacksonContext.createTypeDefinition((TypeElement) declaration), contextStack);
+        }
       }
+    }
+    catch (RuntimeException e) {
+      if (e.getClass().getName().endsWith("CompletionFailure")) {
+        contextStack = new LinkedList<>(contextStack);
+        contextStack.push(declaration);
+        throw new CompletionFailureException(contextStack, e);
+      }
+
+      throw e;
     }
   }
 

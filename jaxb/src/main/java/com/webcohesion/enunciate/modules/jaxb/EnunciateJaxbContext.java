@@ -15,6 +15,7 @@
  */
 package com.webcohesion.enunciate.modules.jaxb;
 
+import com.webcohesion.enunciate.CompletionFailureException;
 import com.webcohesion.enunciate.EnunciateContext;
 import com.webcohesion.enunciate.EnunciateException;
 import com.webcohesion.enunciate.javac.decorations.element.DecoratedTypeElement;
@@ -198,6 +199,11 @@ public class EnunciateJaxbContext extends EnunciateModuleContext {
     knownTypes.put(java.util.UUID.class.getName(), KnownXmlType.STRING);
     knownTypes.put(XMLGregorianCalendar.class.getName(), KnownXmlType.DATE_TIME); //JAXB spec says it maps to anySimpleType, but we can just assume dateTime...
     knownTypes.put(GregorianCalendar.class.getName(), KnownXmlType.DATE_TIME);
+    knownTypes.put(java.time.LocalDate.class.getName(), KnownXmlType.DATE);
+    knownTypes.put(java.time.LocalTime.class.getName(), KnownXmlType.TIME);
+    knownTypes.put(java.time.LocalDateTime.class.getName(), KnownXmlType.DATE_TIME);
+    knownTypes.put(java.time.OffsetDateTime.class.getName(), KnownXmlType.DATE_TIME);
+    knownTypes.put(java.time.ZonedDateTime.class.getName(), KnownXmlType.DATE_TIME);
 
     return knownTypes;
   }
@@ -861,6 +867,15 @@ public class EnunciateJaxbContext extends EnunciateModuleContext {
             mapType.getKeyType().accept(this, context);
             mapType.getValueType().accept(this, context);
           }
+        }
+        catch (RuntimeException e) {
+          if (e.getClass().getName().endsWith("CompletionFailure")) {
+            LinkedList<Element> referenceStack = new LinkedList<>(context.referenceStack);
+            referenceStack.push(declaration);
+            throw new CompletionFailureException(referenceStack, e);
+          }
+
+          throw e;
         }
         finally {
           context.recursionStack.pop();

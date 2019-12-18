@@ -360,7 +360,7 @@ public class JavaScriptClientModule extends BasicGeneratingModule implements Api
   public Method findExampleResourceMethod() {
     Method example = null;
     if (this.jaxrsModule != null) {
-      List<ResourceGroup> resourceGroups = this.jaxrsModule.getJaxrsContext().getResourceGroups(new DefaultRegistrationContext());
+      List<ResourceGroup> resourceGroups = this.jaxrsModule.getJaxrsContext().getResourceGroups(new DefaultRegistrationContext(context));
       for (ResourceGroup resourceGroup : resourceGroups) {
         List<Resource> resources = resourceGroup.getResources();
         for (Resource resource : resources) {
@@ -430,7 +430,7 @@ public class JavaScriptClientModule extends BasicGeneratingModule implements Api
    * @return The label for the JavaScript API.
    */
   public String getSlug() {
-    return this.config.getString("[@slug]", this.enunciate.getConfiguration().getSlug());
+    return this.config.getString("[@slug]", this.enunciate.getConfiguration().getSlug() + "-" + getName());
   }
 
   /**

@@ -29,6 +29,9 @@ import javax.lang.model.type.TypeMirror;
 import com.webcohesion.enunciate.javac.decorations.adaptors.ElementAdaptor;
 import com.webcohesion.enunciate.javac.decorations.element.DecoratedElement;
 import com.webcohesion.enunciate.javac.javadoc.JavaDoc;
+import com.webcohesion.enunciate.metadata.Ignore;
+import com.webcohesion.enunciate.metadata.Password;
+import com.webcohesion.enunciate.metadata.rs.ResourceGroup;
 
 /**
  * @author Ryan Heaton
@@ -37,24 +40,29 @@ public class AnnotationUtils {
 
   private AnnotationUtils() {}
 
-  public static <A extends Annotation> List<A> getAnnotations(Class<A> clazz, Element el) {
+  public static <A extends Annotation> A getAnnotation(Class<A> clazz, Element el, boolean includeMetaAnnotations) {
+    List<A> annotations = getAnnotations(clazz, el, includeMetaAnnotations);
+    return annotations.isEmpty() ? null : annotations.get(0);
+  }
+
+  public static <A extends Annotation> List<A> getAnnotations(Class<A> clazz, Element el, boolean includeMetaAnnotations) {
     if (el == null || (el instanceof TypeElement && Object.class.getName().equals(((TypeElement) el).getQualifiedName().toString()))) {
       return Collections.emptyList();
     }
 
     ArrayList<A> allAnnotations = new ArrayList<A>();
-    A annotation = el.getAnnotation(clazz);
+    A annotation = includeMetaAnnotations ? getMetaAnnotation(clazz, el) : el.getAnnotation(clazz);
     if (annotation != null) {
       allAnnotations.add(annotation);
     }
 
-    allAnnotations.addAll(getAnnotations(clazz, el.getEnclosingElement()));
+    allAnnotations.addAll(getAnnotations(clazz, el.getEnclosingElement(), includeMetaAnnotations));
 
     if (el instanceof TypeElement) {
       //include the superclass.
       TypeMirror superclass = ((TypeElement) el).getSuperclass();
       if (superclass instanceof DeclaredType) {
-        allAnnotations.addAll(getAnnotations(clazz, ((DeclaredType) superclass).asElement()));
+        allAnnotations.addAll(getAnnotations(clazz, ((DeclaredType) superclass).asElement(), includeMetaAnnotations));
       }
     }
 
@@ -112,8 +120,6 @@ public class AnnotationUtils {
       allTags.add(tagList);
     }
 
-    allTags.addAll(getJavaDocTags(tag, el.getEnclosingElement()));
-
     if (el instanceof TypeElement) {
       //include the superclass.
       TypeMirror superclass = ((TypeElement) el).getSuperclass();
@@ -123,6 +129,48 @@ public class AnnotationUtils {
       }
     }
 
+    allTags.addAll(getJavaDocTags(tag, el.getEnclosingElement()));
+
     return allTags;
+  }
+
+  public static ResourceGroup getResourceGroup(Element el) {
+    ResourceGroup annotation = getAnnotation(ResourceGroup.class, el, true);
+    if (annotation != null) {
+      return annotation;
+    }
+
+    List<JavaDoc.JavaDocTagList> tags = getJavaDocTags("resourceGroup", el);
+
+    if (!tags.isEmpty()) {
+      return new ResourceGroup() {
+        @Override
+        public String value() {
+          return tags.get(0).toString();
+        }
+
+        @Override
+        public String description() {
+          return "##default";
+        }
+
+        @Override
+        public Class<? extends Annotation> annotationType() {
+          return null;
+        }
+      };
+    }
+
+    return null;
+  }
+
+  public static boolean isIgnored(Element element) {
+    List<JavaDoc.JavaDocTagList> ignoreTags = getJavaDocTags("ignore", element);
+    return !ignoreTags.isEmpty() || element.getAnnotation(Ignore.class) != null;
+  }
+
+  public static boolean isPassword(Element element) {
+    List<JavaDoc.JavaDocTagList> ignoreTags = getJavaDocTags("password", element);
+    return !ignoreTags.isEmpty() || element.getAnnotation(Password.class) != null;
   }
 }

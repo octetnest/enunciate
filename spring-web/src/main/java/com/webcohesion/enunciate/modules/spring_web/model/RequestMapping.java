@@ -34,7 +34,6 @@ import com.webcohesion.enunciate.modules.spring_web.EnunciateSpringWebContext;
 import com.webcohesion.enunciate.modules.spring_web.model.util.RSParamDocComment;
 import com.webcohesion.enunciate.modules.spring_web.model.util.ReturnWrappedDocComment;
 import com.webcohesion.enunciate.util.AnnotationUtils;
-import com.webcohesion.enunciate.util.IgnoreUtils;
 import com.webcohesion.enunciate.util.TypeHintUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -177,11 +176,11 @@ public class RequestMapping extends DecoratedExecutableElement implements HasFac
     }
 
     for (VariableElement parameterDeclaration : getParameters()) {
-      if (IgnoreUtils.isIgnored(parameterDeclaration)) {
+      if (AnnotationUtils.isIgnored(parameterDeclaration)) {
         continue;
       }
 
-      if (isImplicitUntypedRequestBody(parameterDeclaration.asType())) {
+      if (isImplicitUntypedRequestBody(parameterDeclaration.asType()) && entityParameter == null) {
         DecoratedProcessingEnvironment env = context.getContext().getProcessingEnvironment();
         entityParameter = new ResourceEntityParameter(this, TypeMirrorUtils.objectType(env), env);
       }
@@ -289,7 +288,7 @@ public class RequestMapping extends DecoratedExecutableElement implements HasFac
       }
     }
 
-    List<RequestHeaders> inheritedRequestHeaders = AnnotationUtils.getAnnotations(RequestHeaders.class, parent);
+    List<RequestHeaders> inheritedRequestHeaders = AnnotationUtils.getAnnotations(RequestHeaders.class, parent, true);
     for (RequestHeaders inheritedRequestHeader : inheritedRequestHeaders) {
       for (RequestHeader header : inheritedRequestHeader.value()) {
         requestParameters.add(new ExplicitRequestParameter(this, header.description(), header.name(), ResourceParameterType.HEADER, context));
@@ -310,7 +309,7 @@ public class RequestMapping extends DecoratedExecutableElement implements HasFac
       }
     }
 
-    List<StatusCodes> inheritedStatusCodes = AnnotationUtils.getAnnotations(StatusCodes.class, parent);
+    List<StatusCodes> inheritedStatusCodes = AnnotationUtils.getAnnotations(StatusCodes.class, parent, true);
     for (StatusCodes inheritedStatusCode : inheritedStatusCodes) {
       for (com.webcohesion.enunciate.metadata.rs.ResponseCode code : inheritedStatusCode.value()) {
         ResponseCode rc = new ResponseCode(this);
@@ -372,7 +371,7 @@ public class RequestMapping extends DecoratedExecutableElement implements HasFac
       }
     }
 
-    List<Warnings> inheritedWarnings = AnnotationUtils.getAnnotations(Warnings.class, parent);
+    List<Warnings> inheritedWarnings = AnnotationUtils.getAnnotations(Warnings.class, parent, true);
     for (Warnings inheritedWarning : inheritedWarnings) {
       for (com.webcohesion.enunciate.metadata.rs.ResponseCode code : inheritedWarning.value()) {
         ResponseCode rc = new ResponseCode(this);
@@ -425,7 +424,7 @@ public class RequestMapping extends DecoratedExecutableElement implements HasFac
       }
     }
 
-    List<ResponseHeaders> inheritedResponseHeaders = AnnotationUtils.getAnnotations(ResponseHeaders.class, parent);
+    List<ResponseHeaders> inheritedResponseHeaders = AnnotationUtils.getAnnotations(ResponseHeaders.class, parent, true);
     for (ResponseHeaders inheritedResponseHeader : inheritedResponseHeaders) {
       for (ResponseHeader header : inheritedResponseHeader.value()) {
         this.responseHeaders.put(header.name(), header.description());

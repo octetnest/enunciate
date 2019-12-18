@@ -1,12 +1,12 @@
 /**
  * Copyright © 2006-2016 Web Cohesion (info@webcohesion.com)
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,26 +15,39 @@
  */
 package com.webcohesion.enunciate;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.URI;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
+import javax.tools.JavaCompiler;
+import javax.tools.ToolProvider;
+
 import com.webcohesion.enunciate.module.DependencySpec;
 import com.webcohesion.enunciate.module.DependingModuleAwareModule;
 import com.webcohesion.enunciate.module.EnunciateModule;
 import com.webcohesion.enunciate.module.TypeDetectingModule;
-import org.jgrapht.DirectedGraph;
-import org.jgrapht.graph.DefaultEdge;
 import org.junit.Test;
 import org.reflections.Reflections;
 import org.reflections.adapters.MetadataAdapter;
 
-import javax.tools.JavaCompiler;
-import javax.tools.ToolProvider;
-import java.io.*;
-import java.net.URI;
-import java.net.URL;
-import java.util.*;
-import java.util.jar.JarEntry;
-import java.util.jar.JarOutputStream;
-
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * @author Ryan Heaton
@@ -53,7 +66,7 @@ public class EnunciateTest {
     myModules.put("f", new TestModule("f", moduleCallOrder, "d", "e"));
 
     Enunciate enunciate = new Enunciate();
-    DirectedGraph<String, DefaultEdge> graph = enunciate.buildModuleGraph(myModules);
+    enunciate.buildModuleGraph(myModules);
     assertEquals(1, myModules.get("a").dependingModules.size());
     assertEquals("d", myModules.get("a").dependingModules.iterator().next());
     assertEquals(1, myModules.get("b").dependingModules.size());
@@ -69,8 +82,7 @@ public class EnunciateTest {
     try {
       enunciate.buildModuleGraph(myModules);
       fail();
-    }
-    catch (EnunciateException e) {
+    } catch (EnunciateException e) {
       //fall through...
     }
   }
@@ -87,7 +99,7 @@ public class EnunciateTest {
     myModules.put("f", new TestModule("f", moduleCallOrder, "d", "e"));
 
     Enunciate enunciate = new Enunciate();
-    enunciate.composeEngine(new EnunciateContext(null, null, null, null, null, null, null), myModules, enunciate.buildModuleGraph(myModules)).toBlocking().single();
+    enunciate.invokeModules(new EnunciateContext(null, null, null, null, null, null, null), myModules, enunciate.buildModuleGraph(myModules));
     assertEquals(6, moduleCallOrder.size());
 
     assertTrue("'a' should be before 'd': " + moduleCallOrder, moduleCallOrder.indexOf("a") < moduleCallOrder.indexOf("d"));
@@ -116,7 +128,7 @@ public class EnunciateTest {
 
     Enunciate.URLFileObject source1 = new Enunciate.URLFileObject(getClass().getResource("/enunciate/Class1.java"), "utf-8");
     File outputDir1 = createTempDir();
-    List<String> options = Arrays.asList("-d", outputDir1.getAbsolutePath() );
+    List<String> options = Arrays.asList("-d", outputDir1.getAbsolutePath());
     assertTrue(compiler.getTask(null, null, null, options, null, Collections.singletonList(source1)).call());
     File sourceFile1 = new File(new File(outputDir1, "enunciate"), "Class1.java");
     InputStream in = getClass().getResourceAsStream("/enunciate/Class1.java");
@@ -132,12 +144,12 @@ public class EnunciateTest {
 
     Enunciate.URLFileObject source2 = new Enunciate.URLFileObject(getClass().getResource("/enunciate/Class2.java"), "utf-8");
     File outputDir2 = createTempDir();
-    options = Arrays.asList("-d", outputDir2.getAbsolutePath() );
+    options = Arrays.asList("-d", outputDir2.getAbsolutePath());
     assertTrue(compiler.getTask(null, null, null, options, null, Collections.singletonList(source2)).call());
 
     Enunciate.URLFileObject source3 = new Enunciate.URLFileObject(getClass().getResource("/enunciate/Class3.java"), "utf-8");
     File outputDir3 = createTempDir();
-    options = Arrays.asList("-d", outputDir3.getAbsolutePath() );
+    options = Arrays.asList("-d", outputDir3.getAbsolutePath());
     assertTrue(compiler.getTask(null, null, null, options, null, Collections.singletonList(source3)).call());
 
     File jar1 = File.createTempFile("EnunciateTest", ".jar");
@@ -187,8 +199,7 @@ public class EnunciateTest {
       for (File file : dir.listFiles()) {
         if (file.isDirectory()) {
           buildFileList(list, file);
-        }
-        else {
+        } else {
           list.add(file);
         }
       }

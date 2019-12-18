@@ -1,12 +1,12 @@
 /**
  * Copyright © 2006-2016 Web Cohesion (info@webcohesion.com)
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * <p>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -21,8 +21,11 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.*;
+import com.webcohesion.enunciate.CompletionFailureException;
 import com.webcohesion.enunciate.EnunciateContext;
 import com.webcohesion.enunciate.EnunciateException;
+import com.webcohesion.enunciate.javac.decorations.DecoratedProcessingEnvironment;
+import com.webcohesion.enunciate.javac.decorations.TypeMirrorDecorator;
 import com.webcohesion.enunciate.javac.decorations.element.PropertyElement;
 import com.webcohesion.enunciate.javac.decorations.type.DecoratedDeclaredType;
 import com.webcohesion.enunciate.javac.decorations.type.DecoratedTypeMirror;
@@ -40,7 +43,7 @@ import com.webcohesion.enunciate.modules.jackson.model.types.JsonType;
 import com.webcohesion.enunciate.modules.jackson.model.types.KnownJsonType;
 import com.webcohesion.enunciate.modules.jackson.model.util.JacksonUtil;
 import com.webcohesion.enunciate.modules.jackson.model.util.MapType;
-import com.webcohesion.enunciate.util.IgnoreUtils;
+import com.webcohesion.enunciate.util.AnnotationUtils;
 import com.webcohesion.enunciate.util.OneTimeLogMessage;
 import com.webcohesion.enunciate.util.TypeHintUtils;
 
@@ -79,8 +82,9 @@ public class EnunciateJacksonContext extends EnunciateModuleContext {
   private final AccessorVisibilityChecker defaultVisibility;
   private final String propertyNamingStrategy;
   private final boolean propertiesAlphabetical;
+  private final String beanValidationGroups;
 
-  public EnunciateJacksonContext(EnunciateContext context, boolean honorJaxb, boolean honorGson, KnownJsonType dateType, boolean collapseTypeHierarchy, Map<String, String> mixins, Map<String, String> examples, AccessorVisibilityChecker visibility, boolean disableExamples, boolean wrapRootValue, String propertyNamingStrategy, boolean propertiesAlphabetical) {
+  public EnunciateJacksonContext(EnunciateContext context, boolean honorJaxb, boolean honorGson, KnownJsonType dateType, boolean collapseTypeHierarchy, Map<String, String> mixins, Map<String, String> examples, AccessorVisibilityChecker visibility, boolean disableExamples, boolean wrapRootValue, String propertyNamingStrategy, boolean propertiesAlphabetical, String beanValidationGroups) {
     super(context);
     this.dateType = dateType;
     this.mixins = mixins;
@@ -96,6 +100,7 @@ public class EnunciateJacksonContext extends EnunciateModuleContext {
     this.collapseTypeHierarchy = collapseTypeHierarchy;
     this.typeDefinitionsBySlug = new HashMap<String, TypeDefinition>();
     this.wrapRootValue = wrapRootValue;
+    this.beanValidationGroups = beanValidationGroups;
   }
 
   public EnunciateContext getContext() {
@@ -133,16 +138,31 @@ public class EnunciateJacksonContext extends EnunciateModuleContext {
   public boolean isPropertiesAlphabetical() {
     return propertiesAlphabetical;
   }
+  public String getBeanValidationGroups() {
+    return beanValidationGroups;
+  }
 
   public DecoratedTypeMirror resolveSyntheticType(DecoratedTypeMirror type) {
     if (type instanceof DeclaredType && !type.isCollection() && MapType.findMapType(type, this) == null) {
       if (!((DeclaredType) type).getTypeArguments().isEmpty()) {
         //if type arguments apply, create a new "synthetic" declared type that captures the type arguments.
-        type = new ParameterizedJacksonDeclaredType((DeclaredType) type, getContext().getProcessingEnvironment());
+        type = new ParameterizedJacksonDeclaredType((DeclaredType) type, getContext());
       }
       else if (type.isInterface()) {
         //if it's an interface, create a "synthetic" type that pretends like it's an abstract class.
         type = new InterfaceJacksonDeclaredType((DeclaredType) type, getContext().getProcessingEnvironment());
+      }
+    }
+    else if (type instanceof WildcardType) {
+      WildcardType wildcardType = (WildcardType) type;
+      DecoratedProcessingEnvironment env = this.context.getProcessingEnvironment();
+      DecoratedTypeMirror extendsBound = TypeMirrorDecorator.decorate((DecoratedTypeMirror) wildcardType.getExtendsBound(), env);
+      DecoratedTypeMirror superBound = TypeMirrorDecorator.decorate((DecoratedTypeMirror) wildcardType.getSuperBound(), env);
+      if (extendsBound != null) {
+        type = resolveSyntheticType(extendsBound);
+      }
+      else if (superBound != null) {
+        type = resolveSyntheticType(superBound);
       }
     }
     else if (type != null) {
@@ -181,7 +201,7 @@ public class EnunciateJacksonContext extends EnunciateModuleContext {
     knownTypes.put(Double.class.getName(), KnownJsonType.NUMBER);
     knownTypes.put(Float.class.getName(), KnownJsonType.NUMBER);
     knownTypes.put(Integer.class.getName(), KnownJsonType.WHOLE_NUMBER);
-    knownTypes.put(Long.class.getName(), KnownJsonType.WHOLE_NUMBER);
+    knownTypes.put(Long.class.getName(), KnownJsonType.LONG_NUMBER);
     knownTypes.put(Short.class.getName(), KnownJsonType.WHOLE_NUMBER);
     knownTypes.put(Boolean.TYPE.getName(), KnownJsonType.BOOLEAN);
     knownTypes.put(Byte.TYPE.getName(), KnownJsonType.WHOLE_NUMBER);
@@ -245,8 +265,9 @@ public class EnunciateJacksonContext extends EnunciateModuleContext {
     knownTypes.put("java.time.ZonedDateTime", this.dateType);
     knownTypes.put("java.time.OffsetDateTime", this.dateType);
     knownTypes.put("org.joda.time.DateTime", this.dateType);
+    knownTypes.put("org.joda.time.LocalDate", this.dateType);
     knownTypes.put("java.util.Currency", KnownJsonType.STRING);
-    
+
     for (String m : this.mixins.keySet()) {
       if (knownTypes.remove(m) != null) {
         debug("Unregistering %s from known types, as it is redefined using a mixin.", m);
@@ -328,7 +349,7 @@ public class EnunciateJacksonContext extends EnunciateModuleContext {
   }
 
   public boolean isIgnored(Element el) {
-    if (IgnoreUtils.isIgnored(el)) {
+    if (AnnotationUtils.isIgnored(el)) {
       return true;
     }
 
@@ -347,8 +368,7 @@ public class EnunciateJacksonContext extends EnunciateModuleContext {
   public void add(TypeDefinition typeDef, LinkedList<Element> stack) {
     for (AnnotationMirror a : typeDef.getAnnotationMirrors()) {
       Element element = a.getAnnotationType().asElement();
-      if (((TypeElement) element).getQualifiedName().contentEquals("org.immutables.value.Generated"))
-      {
+      if (((TypeElement) element).getQualifiedName().contentEquals("org.immutables.value.Generated")) {
         debug("excluding %s due to @org.immutables.value.Generated", typeDef.getQualifiedName());
         return;
       }
@@ -547,7 +567,7 @@ public class EnunciateJacksonContext extends EnunciateModuleContext {
     if (subTypes == null && seeAlso == null && declaration instanceof TypeElement) {
       // No annotation tells us what to do, so we'll look up subtypes and add them
       for (Element el : getContext().getApiElements()) {
-        if ((el instanceof TypeElement) && !((TypeElement)el).getQualifiedName().contentEquals(((TypeElement)declaration).getQualifiedName()) && ((DecoratedTypeMirror) el.asType()).isInstanceOf(declaration)) {
+        if ((el instanceof TypeElement) && !((TypeElement) el).getQualifiedName().contentEquals(((TypeElement) declaration).getQualifiedName()) && ((DecoratedTypeMirror) el.asType()).isInstanceOf(declaration)) {
           add(createTypeDefinition((TypeElement) el), stack);
         }
       }
@@ -653,6 +673,15 @@ public class EnunciateJacksonContext extends EnunciateModuleContext {
               typeArg.accept(this, context);
             }
           }
+        }
+        catch (RuntimeException e) {
+          if (e.getClass().getName().endsWith("CompletionFailure")) {
+            LinkedList<Element> referenceStack = new LinkedList<>(context.referenceStack);
+            referenceStack.push(declaration);
+            throw new CompletionFailureException(referenceStack, e);
+          }
+
+          throw e;
         }
         finally {
           context.recursionStack.pop();

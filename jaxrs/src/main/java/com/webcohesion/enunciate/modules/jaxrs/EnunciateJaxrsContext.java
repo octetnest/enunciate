@@ -246,7 +246,7 @@ public class EnunciateJaxrsContext extends EnunciateModuleContext {
       Iterator<RootResource> it = this.rootResources.iterator();
       while (it.hasNext()) {
         RootResource resource = it.next();
-        if (rootResourceType.isInstanceOf(resource)) {
+        if (resource.isInterface() && rootResourceType.isInstanceOf(resource)) {
           debug("%s was identified as a JAX-RS root resource, but will be ignored because root resource %s implements it.", resource.getQualifiedName(), rootResource.getQualifiedName());
           it.remove();
         }
@@ -339,7 +339,7 @@ public class EnunciateJaxrsContext extends EnunciateModuleContext {
   public List<ResourceGroup> getResourceGroupsByClass(ApiRegistrationContext registrationContext) {
     List<ResourceGroup> resourceGroups = new ArrayList<ResourceGroup>();
     Set<String> slugs = new TreeSet<String>();
-    FacetFilter facetFilter = context.getConfiguration().getFacetFilter();
+    FacetFilter facetFilter = registrationContext.getFacetFilter();
     for (RootResource rootResource : rootResources) {
       if (!facetFilter.accept(rootResource)) {
         continue;
@@ -381,7 +381,7 @@ public class EnunciateJaxrsContext extends EnunciateModuleContext {
   public List<ResourceGroup> getResourceGroupsByPath(ApiRegistrationContext registrationContext) {
     Map<String, PathBasedResourceGroupImpl> resourcesByPath = new HashMap<String, PathBasedResourceGroupImpl>();
 
-    FacetFilter facetFilter = context.getConfiguration().getFacetFilter();
+    FacetFilter facetFilter = registrationContext.getFacetFilter();
     for (RootResource rootResource : rootResources) {
       if (!facetFilter.accept(rootResource)) {
         continue;
@@ -417,7 +417,7 @@ public class EnunciateJaxrsContext extends EnunciateModuleContext {
   public List<ResourceGroup> getResourceGroupsByAnnotation(ApiRegistrationContext registrationContext) {
     Map<String, AnnotationBasedResourceGroupImpl> resourcesByAnnotation = new HashMap<String, AnnotationBasedResourceGroupImpl>();
 
-    FacetFilter facetFilter = context.getConfiguration().getFacetFilter();
+    FacetFilter facetFilter = registrationContext.getFacetFilter();
     for (RootResource rootResource : rootResources) {
       if (!facetFilter.accept(rootResource)) {
         continue;
@@ -425,10 +425,10 @@ public class EnunciateJaxrsContext extends EnunciateModuleContext {
 
       for (ResourceMethod method : rootResource.getResourceMethods(true)) {
         if (facetFilter.accept(method)) {
-          com.webcohesion.enunciate.metadata.rs.ResourceGroup annotation = method.getAnnotation(com.webcohesion.enunciate.metadata.rs.ResourceGroup.class);
+          com.webcohesion.enunciate.metadata.rs.ResourceGroup annotation = AnnotationUtils.getResourceGroup(method);
           com.webcohesion.enunciate.modules.jaxrs.model.Resource resource = method.getParent();
           while (annotation == null && resource != null) {
-            annotation = resource.getAnnotation(com.webcohesion.enunciate.metadata.rs.ResourceGroup.class);
+            annotation = AnnotationUtils.getResourceGroup(resource);
             resource = resource.getParent();
           }
 

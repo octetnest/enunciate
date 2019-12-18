@@ -1,12 +1,12 @@
 /**
  * Copyright © 2006-2016 Web Cohesion (info@webcohesion.com)
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -15,21 +15,29 @@
  */
 package com.webcohesion.enunciate;
 
-import com.webcohesion.enunciate.javac.decorations.*;
-import com.webcohesion.enunciate.module.ContextModifyingModule;
-import com.webcohesion.enunciate.module.EnunciateModule;
-import org.jgrapht.DirectedGraph;
-import org.jgrapht.graph.DefaultEdge;
-import rx.Observable;
-
-import javax.annotation.processing.*;
+import java.util.*;
+import javax.annotation.processing.AbstractProcessor;
+import javax.annotation.processing.ProcessingEnvironment;
+import javax.annotation.processing.RoundEnvironment;
+import javax.annotation.processing.SupportedAnnotationTypes;
+import javax.annotation.processing.SupportedOptions;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.TypeElement;
 import javax.lang.model.util.Elements;
-import java.util.*;
 
-import static com.webcohesion.enunciate.util.IgnoreUtils.isIgnored;
+import com.webcohesion.enunciate.javac.decorations.AnnotationMirrorDecoration;
+import com.webcohesion.enunciate.javac.decorations.DecoratedProcessingEnvironment;
+import com.webcohesion.enunciate.javac.decorations.DecoratedRoundEnvironment;
+import com.webcohesion.enunciate.javac.decorations.ElementDecoration;
+import com.webcohesion.enunciate.javac.decorations.ElementDecorator;
+import com.webcohesion.enunciate.javac.decorations.TypeMirrorDecoration;
+import com.webcohesion.enunciate.module.ContextModifyingModule;
+import com.webcohesion.enunciate.module.EnunciateModule;
+import org.jgrapht.Graph;
+import org.jgrapht.graph.DefaultEdge;
+
+import static com.webcohesion.enunciate.util.AnnotationUtils.isIgnored;
 
 /**
  * @author Ryan Heaton
@@ -96,8 +104,7 @@ public class EnunciateAnnotationProcessor extends AbstractProcessor {
         TypeElement typeElement = elementUtils.getTypeElement(includedType);
         if (typeElement != null) {
           apiElements.add(typeElement);
-        }
-        else {
+        } else {
           this.enunciate.getLogger().debug("Unable to load type element %s.", includedType);
         }
       }
@@ -116,11 +123,8 @@ public class EnunciateAnnotationProcessor extends AbstractProcessor {
       //compose the engine.
       Map<String, ? extends EnunciateModule> enabledModules = this.enunciate.findEnabledModules();
       this.enunciate.getLogger().info("Enabled modules: %s", enabledModules.keySet());
-      DirectedGraph<String, DefaultEdge> graph = this.enunciate.buildModuleGraph(enabledModules);
-      Observable<EnunciateContext> engine = this.enunciate.composeEngine(this.context, enabledModules, graph);
-
-      //fire off (and block on) the engine.
-      engine.toList().toBlocking().single();
+      Graph<String, DefaultEdge> graph = this.enunciate.buildModuleGraph(enabledModules);
+      this.enunciate.invokeModules(this.context, enabledModules, graph);
 
       this.processed = true;
     }
@@ -132,8 +136,17 @@ public class EnunciateAnnotationProcessor extends AbstractProcessor {
     Iterator<Element> elementIterator = apiElements.iterator();
     while (elementIterator.hasNext()) {
       Element next = elementIterator.next();
-      if (this.context.isExcluded(next) || isIgnored(next)) {
-        elementIterator.remove();
+      try {
+        if (this.context.isExcluded(next) || isIgnored(next)) {
+          elementIterator.remove();
+        }
+      }
+      catch (RuntimeException e) {
+        if (e.getClass().getName().endsWith("CompletionFailure")) {
+          throw new CompletionFailureException(Collections.singletonList(next), e);
+        }
+
+        throw e;
       }
     }
   }
@@ -143,8 +156,17 @@ public class EnunciateAnnotationProcessor extends AbstractProcessor {
       Iterator<Element> elementIterator = apiElements.iterator();
       while (elementIterator.hasNext()) {
         Element next = elementIterator.next();
-        if (!this.context.isExplicitlyIncluded(next)) {
-          elementIterator.remove();
+        try {
+          if (!this.context.isExplicitlyIncluded(next)) {
+            elementIterator.remove();
+          }
+        }
+        catch (RuntimeException e) {
+          if (e.getClass().getName().endsWith("CompletionFailure")) {
+            throw new CompletionFailureException(Collections.singletonList(next), e);
+          }
+
+          throw e;
         }
       }
     }

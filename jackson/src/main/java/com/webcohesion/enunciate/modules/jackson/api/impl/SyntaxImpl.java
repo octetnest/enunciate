@@ -75,6 +75,11 @@ public class SyntaxImpl implements Syntax, Namespace {
       return null;
     }
 
+    int semicolonLocation = mediaType.indexOf(";");
+    if (semicolonLocation > -1){
+      mediaType = mediaType.substring(0, semicolonLocation);
+    }
+
     //if it's a wildcard, we'll return an implicit descriptor.
     if (mediaType.equals("*/*") || mediaType.equals("application/*")) {
       mediaType = "application/json";
@@ -144,7 +149,7 @@ public class SyntaxImpl implements Syntax, Namespace {
   public List<? extends DataType> getTypes() {
     Collection<TypeDefinition> typeDefinitions = this.context.getTypeDefinitions();
     ArrayList<DataType> dataTypes = new ArrayList<DataType>();
-    FacetFilter facetFilter = this.context.getContext().getConfiguration().getFacetFilter();
+    FacetFilter facetFilter = this.registrationContext.getFacetFilter();
     for (TypeDefinition typeDefinition : typeDefinitions) {
       if (!facetFilter.accept(typeDefinition)) {
         continue;

@@ -122,6 +122,10 @@ public class ResourceMethod extends DecoratedExecutableElement implements HasFac
       resourceParameters = new TreeSet<ResourceParameter>();
       //if we're not overriding the signature, assume we use the real method signature.
       for (VariableElement parameterDeclaration : getParameters()) {
+        if (AnnotationUtils.isIgnored(parameterDeclaration)) {
+          continue;
+        }
+
         if (ResourceParameter.isResourceParameter(parameterDeclaration, context)) {
           resourceParameters.add(new ResourceParameter(parameterDeclaration, this));
         }
@@ -204,7 +208,7 @@ public class ResourceMethod extends DecoratedExecutableElement implements HasFac
       }
     }
 
-    List<ResponseHeaders> inheritedResponseHeaders = AnnotationUtils.getAnnotations(ResponseHeaders.class, parent);
+    List<ResponseHeaders> inheritedResponseHeaders = AnnotationUtils.getAnnotations(ResponseHeaders.class, parent, true);
     for (ResponseHeaders inheritedResponseHeader : inheritedResponseHeaders) {
       for (ResponseHeader header : inheritedResponseHeader.value()) {
         responseHeaders.put(header.name(), header.description());
@@ -246,7 +250,7 @@ public class ResourceMethod extends DecoratedExecutableElement implements HasFac
       }
     }
 
-    List<Warnings> inheritedWarnings = AnnotationUtils.getAnnotations(Warnings.class, parent);
+    List<Warnings> inheritedWarnings = AnnotationUtils.getAnnotations(Warnings.class, parent, true);
     for (Warnings inheritedWarning : inheritedWarnings) {
       for (com.webcohesion.enunciate.metadata.rs.ResponseCode code : inheritedWarning.value()) {
         ResponseCode rc = new ResponseCode(this);
@@ -459,7 +463,7 @@ public class ResourceMethod extends DecoratedExecutableElement implements HasFac
       }
     }
 
-    List<RequestHeaders> inheritedRequestHeaders = AnnotationUtils.getAnnotations(RequestHeaders.class, parent);
+    List<RequestHeaders> inheritedRequestHeaders = AnnotationUtils.getAnnotations(RequestHeaders.class, parent, true);
     for (RequestHeaders inheritedRequestHeader : inheritedRequestHeaders) {
       for (RequestHeader header : inheritedRequestHeader.value()) {
         extraParameters.add(new ExplicitResourceParameter(this, new StaticDocComment(header.description()), header.name(), ResourceParameterType.HEADER, context));
@@ -502,7 +506,7 @@ public class ResourceMethod extends DecoratedExecutableElement implements HasFac
       }
     }
 
-    List<StatusCodes> inheritedStatusCodes = AnnotationUtils.getAnnotations(StatusCodes.class, parent);
+    List<StatusCodes> inheritedStatusCodes = AnnotationUtils.getAnnotations(StatusCodes.class, parent, true);
     for (StatusCodes inheritedStatusCode : inheritedStatusCodes) {
       for (com.webcohesion.enunciate.metadata.rs.ResponseCode code : inheritedStatusCode.value()) {
         ResponseCode rc = new ResponseCode(this);

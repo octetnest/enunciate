@@ -1,12 +1,12 @@
 /**
  * Copyright © 2006-2016 Web Cohesion (info@webcohesion.com)
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -17,15 +17,14 @@ package com.webcohesion.enunciate.modules.jaxws.api.impl;
 
 import com.webcohesion.enunciate.api.Styles;
 import com.webcohesion.enunciate.api.datatype.BaseType;
-import com.webcohesion.enunciate.api.datatype.BaseTypeFormat;
 import com.webcohesion.enunciate.api.datatype.DataType;
 import com.webcohesion.enunciate.api.datatype.DataTypeReference;
 import com.webcohesion.enunciate.api.datatype.Example;
 import com.webcohesion.enunciate.api.services.Fault;
 import com.webcohesion.enunciate.facets.Facet;
 import com.webcohesion.enunciate.javac.javadoc.JavaDoc;
-import com.webcohesion.enunciate.metadata.Label;
 import com.webcohesion.enunciate.modules.jaxws.model.WebFault;
+import com.webcohesion.enunciate.util.AnnotationUtils;
 
 import javax.lang.model.element.AnnotationMirror;
 import java.lang.annotation.Annotation;
@@ -74,15 +73,9 @@ public class FaultImpl implements Fault, DataTypeReference {
   public String getLabel() {
     String value = getName();
 
-    Label label = this.fault.getAnnotation(Label.class);
-    if (label != null) {
-      value = label.value();
-    }
-
-    JavaDoc.JavaDocTagList tags = this.fault.getJavaDoc().get("label");
-    if (tags != null && tags.size() > 0) {
-      String tag = tags.get(0).trim();
-      value = tag.isEmpty() ? value : tag;
+    String specifiedLabel = AnnotationUtils.getSpecifiedLabel(this.fault);
+    if (specifiedLabel != null) {
+      value = specifiedLabel;
     }
 
     return value;
@@ -131,7 +124,7 @@ public class FaultImpl implements Fault, DataTypeReference {
   }
 
   @Override
-  public BaseTypeFormat getBaseTypeFormat() {
+  public String getBaseTypeFormat() {
     return null;
   }
 }

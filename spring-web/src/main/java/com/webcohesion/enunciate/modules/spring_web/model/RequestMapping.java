@@ -1,12 +1,12 @@
 /**
  * Copyright © 2006-2016 Web Cohesion (info@webcohesion.com)
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -28,22 +28,23 @@ import com.webcohesion.enunciate.javac.javadoc.JavaDoc;
 import com.webcohesion.enunciate.javac.javadoc.ParamDocComment;
 import com.webcohesion.enunciate.javac.javadoc.ReturnDocComment;
 import com.webcohesion.enunciate.javac.javadoc.StaticDocComment;
-import com.webcohesion.enunciate.metadata.rs.RequestHeader;
 import com.webcohesion.enunciate.metadata.rs.*;
 import com.webcohesion.enunciate.modules.spring_web.EnunciateSpringWebContext;
 import com.webcohesion.enunciate.modules.spring_web.model.util.RSParamDocComment;
 import com.webcohesion.enunciate.modules.spring_web.model.util.ReturnWrappedDocComment;
 import com.webcohesion.enunciate.util.AnnotationUtils;
+import com.webcohesion.enunciate.util.JAXDocletUtil;
 import com.webcohesion.enunciate.util.TypeHintUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.ResponseStatus;
 
 import javax.annotation.security.RolesAllowed;
 import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.TypeElement;
 import javax.lang.model.element.VariableElement;
-import javax.lang.model.type.TypeKind;
 import javax.lang.model.type.TypeMirror;
 import java.io.InputStream;
 import java.io.Reader;
@@ -78,7 +79,7 @@ public class RequestMapping extends DecoratedExecutableElement implements HasFac
   private final ResourceRepresentationMetadata representationMetadata;
   private final Set<Facet> facets = new TreeSet<Facet>();
 
-  public RequestMapping(List<PathSegment> pathSegments, RequestMethod[] methods, String[] consumesInfo, String[] producesInfo, ExecutableElement delegate, SpringController parent, TypeVariableContext variableContext, EnunciateSpringWebContext context) {
+  public RequestMapping(List<PathSegment> pathSegments, org.springframework.web.bind.annotation.RequestMapping mapping, ExecutableElement delegate, SpringController parent, TypeVariableContext variableContext, EnunciateSpringWebContext context) {
     super(delegate, context.getContext().getProcessingEnvironment());
     this.context = context;
     this.pathSegments = pathSegments;
@@ -86,8 +87,8 @@ public class RequestMapping extends DecoratedExecutableElement implements HasFac
     //initialize first with all methods.
     EnumSet<RequestMethod> httpMethods = EnumSet.allOf(RequestMethod.class);
 
-    if (methods.length > 0) {
-      httpMethods.retainAll(Arrays.asList(methods));
+    if (mapping.method().length > 0) {
+      httpMethods.retainAll(Arrays.asList(mapping.method()));
     }
 
     httpMethods.retainAll(parent.getApplicableMethods());
@@ -102,8 +103,8 @@ public class RequestMapping extends DecoratedExecutableElement implements HasFac
     }
 
     Set<String> consumes = new TreeSet<String>();
-    if (consumesInfo != null && consumesInfo.length > 0) {
-      for (String mediaType : consumesInfo) {
+    if (mapping.consumes().length > 0) {
+      for (String mediaType : mapping.consumes()) {
         if (mediaType.startsWith("!")) {
           continue;
         }
@@ -126,8 +127,8 @@ public class RequestMapping extends DecoratedExecutableElement implements HasFac
     this.consumesMediaTypes = consumes;
 
     Set<String> produces = new TreeSet<String>();
-    if (producesInfo != null && producesInfo.length > 0) {
-      for (String mediaType : producesInfo) {
+    if (mapping.produces().length > 0) {
+      for (String mediaType : mapping.produces()) {
         if (mediaType.startsWith("!")) {
           continue;
         }
@@ -211,7 +212,7 @@ public class RequestMapping extends DecoratedExecutableElement implements HasFac
       }
 
       boolean returnsResponseBody = getAnnotation(ResponseBody.class) != null
-        || AnnotationUtils.getMetaAnnotation(ResponseBody.class, parent) != null;
+         || AnnotationUtils.getMetaAnnotation(ResponseBody.class, parent) != null;
 
       if (returnType instanceof DecoratedDeclaredType && returnType.isInstanceOf("org.springframework.http.HttpEntity")) {
         DecoratedDeclaredType entity = (DecoratedDeclaredType) returnType;
@@ -223,34 +224,15 @@ public class RequestMapping extends DecoratedExecutableElement implements HasFac
         returnType = TypeMirrorUtils.objectType(this.env);
       }
 
-      if (localDoc.get("returnWrapped") != null) { //support jax-doclets. see http://jira.codehaus.org/browse/ENUNCIATE-690
-        String returnWrapped = localDoc.get("returnWrapped").get(0);
+      if (returnType.isInstanceOf("org.springframework.core.io.Resource")) {
+        //generic spring resource
+        returnType = TypeMirrorUtils.objectType(this.env);
+      }
 
-        String fqn = returnWrapped.substring(0, JavaDoc.indexOfFirstWhitespace(returnWrapped)).trim();
-
-        boolean array = false;
-        if (fqn.endsWith("[]")) {
-          array = true;
-          fqn = fqn.substring(0, fqn.length() - 2);
-        }
-
-        TypeElement type = env.getElementUtils().getTypeElement(fqn);
-        if (type != null) {
-          if (!array && isNoContentType(fqn)) {
-            returnType = (DecoratedTypeMirror) this.env.getTypeUtils().getNoType(TypeKind.VOID);
-          } else {
-            returnType = (DecoratedTypeMirror) TypeMirrorDecorator.decorate(env.getTypeUtils().getDeclaredType(type), this.env);
-
-            if (array) {
-              returnType = (DecoratedTypeMirror) TypeMirrorDecorator.decorate(env.getTypeUtils().getArrayType(returnType), this.env);
-            }
-          }
-
-          returnType.setDeferredDocComment(new ReturnWrappedDocComment(this));
-        }
-        else {
-          getContext().getContext().getLogger().info("Invalid @returnWrapped type: \"%s\" (doesn't resolve to a type).", fqn);
-        }
+      DecoratedTypeMirror returnWrapped = JAXDocletUtil.getReturnWrapped(getDocComment(), this.env, getContext().getContext().getLogger());
+      if (returnWrapped != null) {
+        returnWrapped.setDeferredDocComment(new ReturnWrappedDocComment(this));
+        returnType = returnWrapped;
       }
 
       //now resolve any type variables.
@@ -258,7 +240,7 @@ public class RequestMapping extends DecoratedExecutableElement implements HasFac
       returnType.setDeferredDocComment(new ReturnDocComment(this));
     }
 
-    outputPayload = returnType == null || returnType.isVoid() ? outputPayload : new ResourceRepresentationMetadata(returnType);
+    outputPayload = returnType == null || returnType.isVoid() || returnType.isInstanceOf(Void.class) ? outputPayload : new ResourceRepresentationMetadata(returnType);
 
 
     JavaDoc.JavaDocTagList doclets = localDoc.get("RequestHeader"); //support jax-doclets. see http://jira.codehaus.org/browse/ENUNCIATE-690
@@ -292,6 +274,14 @@ public class RequestMapping extends DecoratedExecutableElement implements HasFac
     for (RequestHeaders inheritedRequestHeader : inheritedRequestHeaders) {
       for (RequestHeader header : inheritedRequestHeader.value()) {
         requestParameters.add(new ExplicitRequestParameter(this, header.description(), header.name(), ResourceParameterType.HEADER, context));
+      }
+    }
+
+    String[] headers = mapping.headers();
+    for (String header : headers) {
+      //now add any "narrowing" headers that haven't been already captured.
+      if (!contains(requestParameters, header, ResourceParameterType.HEADER)) {
+        requestParameters.add(new ExplicitRequestParameter(this, "", header, ResourceParameterType.HEADER, false, ResourceParameterConstraints.REQUIRED, context));
       }
     }
 
@@ -470,12 +460,15 @@ public class RequestMapping extends DecoratedExecutableElement implements HasFac
     this.facets.addAll(Facet.gatherFacets(delegate, context.getContext()));
     this.facets.addAll(parent.getFacets());
   }
-  
-  // the following name denotes 'no content' semantics:
-  // - com.webcohesion.enunciate.metadata.rs.TypeHint.NO_CONTENT
-  private boolean isNoContentType(String fqn) {
-    String noContentClassName = TypeHint.NO_CONTENT.class.getName();
-    return fqn.equals(noContentClassName.replace('$', '.'));
+
+  private static boolean contains(Set<RequestParameter> requestParameters, String name, ResourceParameterType type) {
+    String typeName = type.name().toLowerCase();
+    for (RequestParameter requestParameter : requestParameters) {
+      if (name.equals(requestParameter.getParameterName()) && (typeName.equals(requestParameter.getTypeName()) || "custom".equals(requestParameter.getTypeName()))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private boolean hasStatusCode(int value) {
@@ -716,6 +709,6 @@ public class RequestMapping extends DecoratedExecutableElement implements HasFac
   private boolean isImplicitUntypedRequestBody(TypeMirror parameterType) {
     DecoratedTypeMirror<?> type = (DecoratedTypeMirror) TypeMirrorDecorator.decorate(parameterType, env);
     return type.isInstanceOf(InputStream.class) || type.isInstanceOf(Reader.class) || type
-            .isInstanceOf("javax.servlet.ServletRequest") || type.isInstanceOf("javax.servlet.http.HttpServletRequest");
+       .isInstanceOf("javax.servlet.ServletRequest") || type.isInstanceOf("javax.servlet.http.HttpServletRequest");
   }
 }

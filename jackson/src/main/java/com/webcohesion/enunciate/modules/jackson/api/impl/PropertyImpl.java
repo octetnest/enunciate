@@ -26,6 +26,7 @@ import com.webcohesion.enunciate.javac.javadoc.JavaDoc.JavaDocTagList;
 import com.webcohesion.enunciate.metadata.ReadOnly;
 import com.webcohesion.enunciate.modules.jackson.model.Member;
 import com.webcohesion.enunciate.modules.jackson.model.types.JsonArrayType;
+import com.webcohesion.enunciate.util.AnnotationUtils;
 import com.webcohesion.enunciate.util.BeanValidationUtils;
 
 import javax.lang.model.element.AnnotationMirror;
@@ -59,7 +60,7 @@ public class PropertyImpl implements Property {
 
   @Override
   public DataTypeReference getDataType() {
-    return new DataTypeReferenceImpl(this.plural ? new JsonArrayType(this.member.getJsonType()) : this.member.getJsonType(), registrationContext);
+    return new DataTypeReferenceImpl(this.plural ? new JsonArrayType(this.member.getJsonType()) : this.member.getJsonType(), AnnotationUtils.getJsonStringFormat(this.member), registrationContext);
   }
 
   @Override
@@ -103,7 +104,7 @@ public class PropertyImpl implements Property {
   }
 
   public String getConstraints() {
-    return BeanValidationUtils.describeConstraints(member, isRequired());
+    return BeanValidationUtils.describeConstraints(member, isRequired(), getDefaultValue());
   }
 
   public String getDefaultValue() {

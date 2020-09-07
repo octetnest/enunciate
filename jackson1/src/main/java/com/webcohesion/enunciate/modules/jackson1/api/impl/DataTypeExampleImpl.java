@@ -1,12 +1,12 @@
 /**
  * Copyright © 2006-2016 Web Cohesion (info@webcohesion.com)
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
+ * <p>
  * http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,6 +16,7 @@
 package com.webcohesion.enunciate.modules.jackson1.api.impl;
 
 import com.webcohesion.enunciate.EnunciateException;
+import com.webcohesion.enunciate.EnunciateLogger;
 import com.webcohesion.enunciate.api.ApiRegistrationContext;
 import com.webcohesion.enunciate.api.datatype.DataTypeReference;
 import com.webcohesion.enunciate.facets.FacetFilter;
@@ -56,6 +57,8 @@ import java.util.concurrent.Callable;
  */
 public class DataTypeExampleImpl extends ExampleImpl {
 
+  private static final ObjectMapper MAPPER = new ObjectMapper().enable(SerializationConfig.Feature.INDENT_OUTPUT);
+
   private final ObjectTypeDefinition type;
   private final List<DataTypeReference.ContainerType> containers;
   private final ApiRegistrationContext registrationContext;
@@ -84,6 +87,12 @@ public class DataTypeExampleImpl extends ExampleImpl {
       node = wrappedNode;
     }
 
+    if (isWrappedSubclass(this.type)) {
+      ObjectNode wrappedNode = JsonNodeFactory.instance.objectNode();
+      wrappedNode.put(this.type.getTypeIdValue(), node);
+      node = wrappedNode;
+    }
+
     JsonNode outer = node;
     for (DataTypeReference.ContainerType container : this.containers) {
       switch (container) {
@@ -102,9 +111,8 @@ public class DataTypeExampleImpl extends ExampleImpl {
       }
     }
 
-    ObjectMapper mapper = new ObjectMapper().enable(SerializationConfig.Feature.INDENT_OUTPUT);
     try {
-      return mapper.writeValueAsString(outer);
+      return MAPPER.writeValueAsString(outer);
     }
     catch (JsonProcessingException e) {
       throw new EnunciateException(e);
@@ -112,6 +120,24 @@ public class DataTypeExampleImpl extends ExampleImpl {
     catch (IOException e) {
       throw new EnunciateException(e);
     }
+  }
+
+  private boolean isWrappedSubclass(ObjectTypeDefinition type) {
+    if (type.isAbstract() || type.isInterface()) {
+      return false;
+    }
+
+    JsonType supertype = type.getSupertype();
+    if (supertype instanceof JsonClassType) {
+      TypeDefinition typeDefinition = ((JsonClassType) supertype).getTypeDefinition();
+      if (typeDefinition.getTypeIdInclusion() == JsonTypeInfo.As.WRAPPER_OBJECT) {
+        return true;
+      }
+      else if (typeDefinition instanceof ObjectTypeDefinition) {
+        return isWrappedSubclass((ObjectTypeDefinition) typeDefinition);
+      }
+    }
+    return false;
   }
 
   private void build(ObjectNode node, ObjectTypeDefinition type, @Nonnull ObjectTypeDefinition sourceType, Context context) {
@@ -126,6 +152,17 @@ public class DataTypeExampleImpl extends ExampleImpl {
       }
     }
 
+    JsonNode override = findExampleOverride(type, type.getContext().getContext().getLogger());
+    if (override != null) {
+      if (override instanceof ObjectNode) {
+        node.putAll((ObjectNode) override);
+        return;
+      }
+      else {
+        type.getContext().getContext().getLogger().warn("JSON example override of %s can't be used because it's not a JSON object.", type.getQualifiedName());
+      }
+    }
+
     FacetFilter facetFilter = this.registrationContext.getFacetFilter();
     for (Member member : type.getMembers()) {
       if (node.has(member.getName())) {
@@ -137,6 +174,12 @@ public class DataTypeExampleImpl extends ExampleImpl {
       }
 
       if (ElementUtils.findDeprecationMessage(member, null) != null) {
+        continue;
+      }
+
+      JsonNode memberOverride = findExampleOverride(member, type.getContext().getContext().getLogger());
+      if (memberOverride != null) {
+        node.put(member.getName(), memberOverride);
         continue;
       }
 
@@ -297,11 +340,36 @@ public class DataTypeExampleImpl extends ExampleImpl {
     }
 
     if (type.getWildcardMember() != null && ElementUtils.findDeprecationMessage(type.getWildcardMember(), null) == null
-            && !ExampleUtils.isExcluded(type.getWildcardMember())) {
+       && !ExampleUtils.isExcluded(type.getWildcardMember())) {
       node.put("extension1", "...");
       node.put("extension2", "...");
     }
 
+  }
+
+  private JsonNode findExampleOverride(DecoratedElement el, EnunciateLogger logger) {
+    String overrideValue = null;
+
+    JavaDoc.JavaDocTagList overrideTags = el.getJavaDoc().get("jsonExampleOverride");
+    if (overrideTags != null && !overrideTags.isEmpty()) {
+      overrideValue = overrideTags.get(0);
+    }
+
+    DocumentationExample annotation = (DocumentationExample) el.getAnnotation(DocumentationExample.class);
+    if (annotation != null && !"##default".equals(annotation.jsonOverride())) {
+      overrideValue = annotation.jsonOverride();
+    }
+
+    if (overrideValue != null) {
+      try {
+        return MAPPER.readTree(overrideValue);
+      }
+      catch (Exception e) {
+        logger.error("Unable to parse example override of element %s: %s", el.toString(), e.getMessage());
+      }
+    }
+
+    return null;
   }
 
   private DocumentationExample getDocumentationExample(Member member) {
@@ -363,7 +431,7 @@ public class DataTypeExampleImpl extends ExampleImpl {
       }
     }
 
-    JsonType supertype = type instanceof ObjectTypeDefinition ? ((ObjectTypeDefinition)type).getSupertype() : null;
+    JsonType supertype = type instanceof ObjectTypeDefinition ? ((ObjectTypeDefinition) type).getSupertype() : null;
     if (supertype instanceof JsonClassType) {
       return findSpecifiedTypeInfoValue(member, specifiedType, ((JsonClassType) supertype).getTypeDefinition());
     }

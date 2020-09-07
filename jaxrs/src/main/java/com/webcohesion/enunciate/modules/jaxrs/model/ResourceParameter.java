@@ -37,6 +37,8 @@ import javax.ws.rs.container.Suspended;
 import javax.ws.rs.core.Context;
 import java.util.*;
 
+import static com.webcohesion.enunciate.util.AnnotationUtils.isIgnored;
+
 /**
  * Parameter for a JAX-RS resource.
  *
@@ -160,7 +162,7 @@ public class ResourceParameter extends DecoratedElement<Element> implements Comp
 
   private boolean multivaluedAutoDetection() {
     DecoratedTypeMirror parameterType = loadType();
-    return parameterType.isArray() || parameterType.isCollection();
+    return parameterType.isArray() || parameterType.isCollection() || parameterType.isStream();
   }
 
   public DecoratedTypeMirror loadType() {
@@ -411,12 +413,27 @@ public class ResourceParameter extends DecoratedElement<Element> implements Comp
       List<VariableElement> enumConstants = ((DecoratedTypeElement) ((DeclaredType) type).asElement()).enumValues();
       Set<String> values = new TreeSet<String>();
       for (VariableElement enumConstant : enumConstants) {
-        values.add(enumConstant.getSimpleName().toString());
+        if (isIgnored(enumConstant)) {
+          continue;
+        }
+
+        values.add(getEnumParameterLabel(enumConstant));
       }
       return new ResourceParameterConstraints.Enumeration(values);
     }
 
     return ResourceParameterConstraints.Unbound.STRING;
+  }
+
+  private String getEnumParameterLabel(VariableElement enumConstant) {
+    String label = enumConstant.getSimpleName().toString();
+
+    String specifiedLabel = AnnotationUtils.getSpecifiedLabel(enumConstant);
+    if (specifiedLabel != null) {
+      label = specifiedLabel;
+    }
+
+    return label;
   }
 
   public ResourceParameterDataType getDataType() {

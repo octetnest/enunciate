@@ -1,12 +1,12 @@
 /**
  * Copyright © 2006-2016 Web Cohesion (info@webcohesion.com)
- *
+ * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -16,11 +16,11 @@
 package com.webcohesion.enunciate.modules.spring_web.api.impl;
 
 import com.webcohesion.enunciate.api.Styles;
-import com.webcohesion.enunciate.api.datatype.BaseTypeFormat;
 import com.webcohesion.enunciate.api.resources.Parameter;
 import com.webcohesion.enunciate.javac.javadoc.JavaDoc;
 import com.webcohesion.enunciate.modules.spring_web.model.RequestParameter;
 import com.webcohesion.enunciate.modules.spring_web.model.ResourceParameterConstraints;
+import com.webcohesion.enunciate.util.AnnotationUtils;
 import com.webcohesion.enunciate.util.BeanValidationUtils;
 import org.springframework.format.annotation.DateTimeFormat;
 
@@ -70,7 +70,7 @@ public class ParameterImpl implements Parameter {
 
   @Override
   public String getConstraints() {
-    String validationConstraints = BeanValidationUtils.describeConstraints(this.param, this.param.isRequired());
+    String validationConstraints = BeanValidationUtils.describeConstraints(this.param, this.param.isRequired(), getDefaultValue());
     String dateTimeFormatDescription = describeDateTimeFormat(this.param);
     if (validationConstraints != null || dateTimeFormatDescription != null) {
       StringBuilder constraints = new StringBuilder();
@@ -106,6 +106,8 @@ public class ParameterImpl implements Parameter {
             return ((ResourceParameterConstraints.Primitive) constraints).getKind().name().toLowerCase();
           case REGEX:
             return "regex: " + ((ResourceParameterConstraints.Regex) constraints).getRegex();
+          case REQUIRED:
+            return "required";
           default:
             //fall through.
         }
@@ -151,6 +153,8 @@ public class ParameterImpl implements Parameter {
           return null;
         case REGEX:
           return null;
+        case REQUIRED:
+          return null;
       }
     }
     return null;
@@ -182,7 +186,7 @@ public class ParameterImpl implements Parameter {
   }
 
   @Override
-  public BaseTypeFormat getTypeFormat() {
-    return null;
+  public String getTypeFormat() {
+    return AnnotationUtils.getJsonStringFormat(this.param);
   }
 }

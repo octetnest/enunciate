@@ -41,10 +41,7 @@ import com.webcohesion.enunciate.modules.jackson1.api.impl.SyntaxImpl;
 import com.webcohesion.enunciate.modules.jackson1.model.util.Jackson1CodeErrors;
 import com.webcohesion.enunciate.modules.jaxrs.JaxrsModule;
 import com.webcohesion.enunciate.util.AntPatternMatcher;
-import com.webcohesion.enunciate.util.freemarker.AnnotationValueMethod;
-import com.webcohesion.enunciate.util.freemarker.ClientPackageForMethod;
-import com.webcohesion.enunciate.util.freemarker.FileDirective;
-import com.webcohesion.enunciate.util.freemarker.IsFacetExcludedMethod;
+import com.webcohesion.enunciate.util.freemarker.*;
 import freemarker.cache.URLTemplateLoader;
 import freemarker.core.Environment;
 import freemarker.template.Configuration;
@@ -264,7 +261,7 @@ public class JavaJSONClientModule extends BasicGeneratingModule implements ApiFe
    */
   public String processTemplate(URL templateURL, Object model) throws IOException, TemplateException {
     debug("Processing template %s.", templateURL);
-    Configuration configuration = new Configuration(Configuration.VERSION_2_3_22);
+    Configuration configuration = new Configuration(FreemarkerUtil.VERSION);
     configuration.setLocale(new Locale("en", "US"));
 
     configuration.setTemplateLoader(new URLTemplateLoader() {
@@ -400,13 +397,13 @@ public class JavaJSONClientModule extends BasicGeneratingModule implements ApiFe
         clientJarFile = new File(packageDir, jarName);
         if (!isUpToDateWithSources(clientJarFile)) {
           if (isBundleSourcesWithClasses()) {
-            boolean anyFiles = this.enunciate.zip(clientJarFile, sourceDir, compileDir);
+            boolean anyFiles = this.enunciate.jar(clientJarFile, getManifest(), sourceDir, compileDir);
             if (!anyFiles) {
               clientJarFile = null;
             }
           }
           else {
-            boolean anyFiles = this.enunciate.zip(clientJarFile, compileDir);
+            boolean anyFiles = this.enunciate.jar(clientJarFile, getManifest(), compileDir);
             if (!anyFiles) {
               clientJarFile = null;
             }
@@ -574,11 +571,11 @@ public class JavaJSONClientModule extends BasicGeneratingModule implements ApiFe
   }
 
   public String getJavacSource() {
-    return this.config.getString("[@javac-source]", "1.6");
+    return this.config.getString("[@javac-source]", "7");
   }
 
   public String getJavacTarget() {
-    return this.config.getString("[@javac-target]", "1.6");
+    return this.config.getString("[@javac-target]", "7");
   }
 
   public Map<String, String> getClientPackageConversions() {

@@ -25,6 +25,8 @@ import com.webcohesion.enunciate.api.ApiRegistry;
 import com.webcohesion.enunciate.api.InterfaceDescriptionFile;
 import com.webcohesion.enunciate.api.PathSummary;
 import com.webcohesion.enunciate.api.datatype.Syntax;
+import com.webcohesion.enunciate.api.resources.Method;
+import com.webcohesion.enunciate.api.resources.Resource;
 import com.webcohesion.enunciate.api.resources.ResourceApi;
 import com.webcohesion.enunciate.api.resources.ResourceGroup;
 import com.webcohesion.enunciate.api.services.ServiceApi;
@@ -32,19 +34,24 @@ import com.webcohesion.enunciate.artifacts.FileArtifact;
 import com.webcohesion.enunciate.facets.FacetFilter;
 import com.webcohesion.enunciate.javac.javadoc.DefaultJavaDocTagHandler;
 import com.webcohesion.enunciate.module.*;
+import com.webcohesion.enunciate.modules.jaxb.JaxbModule;
+import com.webcohesion.enunciate.modules.jaxb.util.PrefixMethod;
 import com.webcohesion.enunciate.util.freemarker.FileDirective;
+import com.webcohesion.enunciate.util.freemarker.FreemarkerUtil;
 import freemarker.cache.URLTemplateLoader;
 import freemarker.core.Environment;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
 import freemarker.template.TemplateException;
 import freemarker.template.TemplateExceptionHandler;
+import org.apache.commons.lang.StringUtils;
 
 import java.io.*;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
 import java.util.*;
+import java.util.function.Function;
 
 /**
  * <h1>Swagger Module</h1>
@@ -53,6 +60,7 @@ import java.util.*;
 public class SwaggerModule extends BasicGeneratingModule implements ApiFeatureProviderModule, ApiRegistryAwareModule, ApiRegistryProviderModule {
 
   private ApiRegistry apiRegistry;
+  JaxbModule jaxbModule;
 
   /**
    * @return "swagger"
@@ -72,6 +80,10 @@ public class SwaggerModule extends BasicGeneratingModule implements ApiFeaturePr
     return Arrays.asList((DependencySpec) new DependencySpec() {
       @Override
       public boolean accept(EnunciateModule module) {
+        if (module instanceof JaxbModule) {
+          jaxbModule = (JaxbModule) module;
+        }
+
         return !getName().equals(module.getName()) && module instanceof ApiRegistryProviderModule;
       }
 
@@ -172,15 +184,35 @@ public class SwaggerModule extends BasicGeneratingModule implements ApiFeaturePr
 
       Map<String, Object> model = new HashMap<String, Object>();
       model.put("apis", this.resourceApis);
-      Set<String> uniquePaths = new TreeSet<String>();
+      boolean includeApplicationPath = isIncludeApplicationPath();
+      Map<String, SwaggerResource> resourcesByPath = new TreeMap<>();
       for (ResourceApi resourceApi : this.resourceApis) {
         for (ResourceGroup resourceGroup : resourceApi.getResourceGroups()) {
           for (PathSummary pathSummary : resourceGroup.getPaths()) {
-            uniquePaths.add(pathSummary.getPath());
+            String path = pathSummary.getPath();
+            if (includeApplicationPath && !StringUtils.isEmpty(resourceGroup.getRelativeContextPath())) {
+              path = "/" + resourceGroup.getRelativeContextPath() + path;
+            }
+            SwaggerResource swaggerResource = resourcesByPath.get(path);
+            if (swaggerResource == null) {
+              swaggerResource = new SwaggerResource(resourceGroup);
+              resourcesByPath.put(path, swaggerResource);
+            }
+
+            for (Resource resource : resourceGroup.getResources()) {
+              if (path.equals(resource.getPath())) {
+                swaggerResource.getMethods().addAll(resource.getMethods());
+              }
+            }
           }
         }
       }
-      model.put("uniquePaths", uniquePaths);
+      Map<String, String> ns2prefix = Collections.emptyMap();
+      if (jaxbModule != null) {
+        ns2prefix = jaxbModule.getJaxbContext().getNamespacePrefixes();
+      }
+
+      model.put("resourcesByPath", resourcesByPath);
       model.put("syntaxes", apiRegistry.getSyntaxes(this.context));
       model.put("file", new FileDirective(srcDir, SwaggerModule.this.enunciate.getLogger()));
       model.put("projectVersion", enunciate.getConfiguration().getVersion());
@@ -201,6 +233,8 @@ public class SwaggerModule extends BasicGeneratingModule implements ApiFeaturePr
       model.put("responsesOf", new ResponsesOfMethod());
       model.put("findBestDataType", new FindBestDataTypeMethod());
       model.put("validParametersOf", new ValidParametersMethod());
+      model.put("definitionIdFor", new DefinitionIdForMethod());
+      model.put("prefixes", ns2prefix);
       model.put("host", getHost());
       model.put("schemes", getSchemes());
       model.put("basePath", getBasePath());
@@ -284,6 +318,10 @@ public class SwaggerModule extends BasicGeneratingModule implements ApiFeaturePr
     return basePath;
   }
 
+  private boolean isIncludeApplicationPath() {
+    return this.config.getBoolean("[@includeApplicationPath]", false);
+  }
+
   /**
    * Processes the specified template with the given model.
    *
@@ -292,7 +330,7 @@ public class SwaggerModule extends BasicGeneratingModule implements ApiFeaturePr
    */
   public String processTemplate(URL templateURL, Object model) throws IOException, TemplateException {
     debug("Processing template %s.", templateURL);
-    Configuration configuration = new Configuration(Configuration.VERSION_2_3_22);
+    Configuration configuration = new Configuration(FreemarkerUtil.VERSION);
     configuration.setLocale(new Locale("en", "US"));
 
     configuration.setTemplateLoader(new URLTemplateLoader() {

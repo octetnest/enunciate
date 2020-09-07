@@ -314,7 +314,7 @@ public class JavaXMLClientModule extends BasicGeneratingModule implements ApiFea
    */
   public String processTemplate(URL templateURL, Object model) throws IOException, TemplateException {
     debug("Processing template %s.", templateURL);
-    Configuration configuration = new Configuration(Configuration.VERSION_2_3_22);
+    Configuration configuration = new Configuration(FreemarkerUtil.VERSION);
     configuration.setLocale(new Locale("en", "US"));
 
     configuration.setTemplateLoader(new URLTemplateLoader() {
@@ -477,13 +477,13 @@ public class JavaXMLClientModule extends BasicGeneratingModule implements ApiFea
         clientJarFile = new File(packageDir, jarName);
         if (!isUpToDateWithSources(clientJarFile)) {
           if (isBundleSourcesWithClasses()) {
-            boolean anyFiles = this.enunciate.zip(clientJarFile, sourceDir, resourcesDir, compileDir);
+            boolean anyFiles = this.enunciate.jar(clientJarFile, getManifest(), sourceDir, resourcesDir, compileDir);
             if (!anyFiles) {
               clientJarFile = null;
             }
           }
           else {
-            boolean anyFiles = this.enunciate.zip(clientJarFile, resourcesDir, compileDir);
+            boolean anyFiles = this.enunciate.jar(clientJarFile, getManifest(), resourcesDir, compileDir);
             if (!anyFiles) {
               clientJarFile = null;
             }
@@ -714,11 +714,11 @@ public class JavaXMLClientModule extends BasicGeneratingModule implements ApiFea
   }
 
   public String getJavacSource() {
-    return this.config.getString("[@javac-source]", "1.6");
+    return this.config.getString("[@javac-source]", "7");
   }
 
   public String getJavacTarget() {
-    return this.config.getString("[@javac-target]", "1.6");
+    return this.config.getString("[@javac-target]", "7");
   }
 
   public List<File> getProjectSources() {

@@ -22,6 +22,7 @@ import com.webcohesion.enunciate.javac.decorations.type.TypeMirrorUtils;
 import com.webcohesion.enunciate.javac.javadoc.JavaDoc;
 import com.webcohesion.enunciate.javac.javadoc.JavaDocTagHandler;
 import com.webcohesion.enunciate.metadata.rs.TypeHint;
+import com.webcohesion.enunciate.util.AnnotationUtils;
 import com.webcohesion.enunciate.util.TypeHintUtils;
 import org.springframework.web.bind.annotation.*;
 
@@ -32,6 +33,8 @@ import java.lang.annotation.IncompleteAnnotationException;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+
+import static com.webcohesion.enunciate.util.AnnotationUtils.isIgnored;
 
 /**
  * PathParameter for a Spring Web request.
@@ -196,7 +199,7 @@ public class SimpleRequestParameter extends RequestParameter {
     }
 
     DecoratedTypeMirror parameterType = loadType();
-    this.multivalued = parameterType.isArray() || parameterType.isCollection();
+    this.multivalued = parameterType.isArray() || parameterType.isCollection() || parameterType.isStream();
 
     this.parameterName = parameterName;
     this.typeName = typeName;
@@ -293,12 +296,27 @@ public class SimpleRequestParameter extends RequestParameter {
       List<VariableElement> enumConstants = ((DecoratedTypeElement) ((DeclaredType) type).asElement()).enumValues();
       Set<String> values = new TreeSet<String>();
       for (VariableElement enumConstant : enumConstants) {
-        values.add(enumConstant.getSimpleName().toString());
+        if (isIgnored(enumConstant)) {
+          continue;
+        }
+
+        values.add(getEnumParameterLabel(enumConstant));
       }
       return new ResourceParameterConstraints.Enumeration(values);
     }
 
     return ResourceParameterConstraints.Unbound.STRING;
+  }
+
+  private String getEnumParameterLabel(VariableElement enumConstant) {
+    String label = enumConstant.getSimpleName().toString();
+
+    String specifiedLabel = AnnotationUtils.getSpecifiedLabel(enumConstant);
+    if (specifiedLabel != null) {
+      label = specifiedLabel;
+    }
+
+    return label;
   }
 
   protected ResourceParameterDataType loadDataType() {
